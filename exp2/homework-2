@@ -1,0 +1,214 @@
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <string>
+#include <cstring>
+#include <cstdio>
+#include <climits>
+using namespace std;
+
+// 1. 二叉树节点结构 BitTree
+struct BitTree {
+    char ch;          // 字符（仅叶节点有效）
+    int freq;         // 频率
+    BitTree *left, *right;
+
+    BitTree(char c = 0, int f = 0) : ch(c), freq(f), left(nullptr), right(nullptr) {}
+    ~BitTree() { delete left; delete right; }
+};
+
+// 优先队列比较器（最小堆）
+struct CompareBitTree {
+    bool operator()(BitTree* a, BitTree* b) {
+        return a->freq > b->freq; // 频率小的优先
+    }
+};
+
+// 2. 位图类 Bitmap（按题目提供的实现）
+class Bitmap {
+private:
+    unsigned char* M;
+    size_t N, _sz; // N: 字节数；_sz: 有效位数
+protected:
+    void expand(size_t k) { // 扩容
+        if (k < 8 * N) return;
+        size_t oldN = N;
+        N = (k + 7) / 8;
+        unsigned char* oldM = M;
+        M = new unsigned char[N];
+        memcpy(M, oldM, oldN);
+        memset(M + oldN, 0, N - oldN);
+        delete[] oldM;
+    }
+public:
+    Bitmap(size_t n = 8) { // 构造
+        N = (n + 7) / 8;
+        M = new unsigned char[N];
+        memset(M, 0, N);
+        _sz = 0;
+    }
+    Bitmap(const char* file, size_t n = 8) { // 从文件读取
+        N = (n + 7) / 8;
+        M = new unsigned char[N];
+        FILE* fp = fopen(file, "r");
+        fread(M, sizeof(char), N, fp);
+        fclose(fp);
+        _sz = 0;
+        for (size_t k = 0; k < n; k++) _sz += test(k);
+    }
+    ~Bitmap() { delete[] M; } // 析构
+
+    size_t size() const { return _sz; }
+    void set(size_t k) { // 设置第k位为1
+        expand(k);
+        M[k >> 3] |= (0x80 >> (k & 0x07));
+        _sz++;
+    }
+    void clear(size_t k) { // 设置第k位为0
+        expand(k);
+        M[k >> 3] &= ~(0x80 >> (k & 0x07));
+        _sz--;
+    }
+    bool test(size_t k) { // 判断第k位是否为1
+        expand(k);
+        return M[k >> 3] & (0x80 >> (k & 0x07));
+    }
+    void dump(const char* file) { // 写入文件
+        FILE* fp = fopen(file, "w");
+        fwrite(M, sizeof(char), N, fp);
+        fclose(fp);
+    }
+    char* bits2string(size_t n) { // 转换为字符串
+        expand(n - 1);
+        char* s = new char[n + 1];
+        s[n] = '\0';
+        for (size_t k = 0; k < n; k++) s[k] = test(k) ? '1' : '0';
+        return s;
+    }
+};
+
+// 3. Huffman编码串类型 HuffCode
+class HuffCode {
+private:
+    Bitmap bitmap;
+public:
+    HuffCode() : bitmap() {}
+    void pushBit(bool bit) { // 添加一位
+        if (bit) bitmap.set(bitmap.size());
+        else bitmap.clear(bitmap.size()); // 实际只需占位，这里简化处理
+    }
+    string toString() { // 转换为二进制字符串
+        char* s = bitmap.bits2string(bitmap.size());
+        string res(s);
+        delete[] s;
+        return res;
+    }
+    size_t length() const { return bitmap.size(); }
+};
+
+// 4. Huffman编码工具类
+class HuffmanCoder {
+private:
+    BitTree* huffTree; // Huffman树
+    vector<HuffCode> codeTable; // 编码表（索引为字符ASCII-97，对应a-z）
+
+    // 递归生成编码表
+    void generateCodeTable(BitTree* node, HuffCode code) {
+        if (!node) return;
+        if (!node->left && !node->right) { // 叶节点
+            codeTable[node->ch - 'a'] = code;
+            return;
+        }
+        // 左子树：0
+        HuffCode leftCode = code;
+        leftCode.pushBit(false);
+        generateCodeTable(node->left, leftCode);
+        // 右子树：1
+        HuffCode rightCode = code;
+        rightCode.pushBit(true);
+        generateCodeTable(node->right, rightCode);
+    }
+public:
+    HuffmanCoder(const vector<int>& freq) { // 构造：传入a-z的频率
+        // 构建Huffman树
+        priority_queue<BitTree*, vector<BitTree*>, CompareBitTree> pq;
+        for (int i = 0; i < 26; i++) {
+            if (freq[i] > 0) {
+                pq.push(new BitTree('a' + i, freq[i]));
+            }
+        }
+        while (pq.size() > 1) {
+            BitTree* left = pq.top(); pq.pop();
+            BitTree* right = pq.top(); pq.pop();
+            BitTree* parent = new BitTree(0, left->freq + right->freq);
+            parent->left = left;
+            parent->right = right;
+            pq.push(parent);
+        }
+        huffTree = pq.top();
+
+        // 生成编码表
+        codeTable.resize(26);
+        generateCodeTable(huffTree, HuffCode());
+    }
+    ~HuffmanCoder() { delete huffTree; }
+
+    // 获取单个字符的编码
+    HuffCode getCode(char ch) {
+        if (ch < 'a' || ch > 'z') throw "Invalid character";
+        return codeTable[ch - 'a'];
+    }
+
+    // 对单词编码
+    string encodeWord(const string& word) {
+        string res;
+        for (char c : word) {
+            res += getCode(c).toString();
+        }
+        return res;
+    }
+};
+
+// 统计《I have a dream》中a-z的频率（示例统计）
+vector<int> countFreqFromSpeech() {
+    vector<int> freq(26, 0);
+    string speech = "i have a dream that one day this nation will rise up and live out the true meaning of its creed we hold these truths to be self evident that all men are created equal that they are endowed by their creator with certain unalienable rights that among these are life liberty and the pursuit of happiness";
+    for (char c : speech) {
+        if (c >= 'a' && c <= 'z') {
+            freq[c - 'a']++;
+        }
+    }
+    return freq;
+}
+
+// 主函数
+int main() {
+    // 1. 统计《I have a dream》中字母频率
+    vector<int> freq = countFreqFromSpeech();
+    cout << "《I have a dream》中a-z的频率：\n";
+    for (int i = 0; i < 26; i++) {
+        cout << (char)('a' + i) << ": " << freq[i] << " ";
+        if ((i + 1) % 6 == 0) cout << endl;
+    }
+    cout << endl << endl;
+
+    // 2. 构建Huffman编码
+    HuffmanCoder coder(freq);
+
+    // 3. 输出a-z的Huffman编码
+    cout << "a-z的Huffman编码：\n";
+    for (int i = 0; i < 26; i++) {
+        if (freq[i] == 0) continue;
+        cout << (char)('a' + i) << ": " << coder.getCode('a' + i).toString() << " ";
+        if ((i + 1) % 4 == 0) cout << endl;
+    }
+    cout << endl << endl;
+
+    // 4. 对单词编码（如dream、liberty）
+    string words[] = {"dream", "liberty", "happiness"};
+    for (string word : words) {
+        cout << "单词 \"" << word << "\" 的Huffman编码：" << coder.encodeWord(word) << endl;
+    }
+
+    return 0;
+}
