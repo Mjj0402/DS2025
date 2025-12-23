@@ -1,0 +1,76 @@
+// Dijkstra最短路径（从start出发到所有节点）
+void Dijkstra(const Graph& g, int start) {
+    vector<int> dist(g.n, INT_MAX);
+    vector<bool> visited(g.n, false);
+    dist[start] = 0;
+
+    for (int i = 0; i < g.n - 1; i++) {
+        // 选未访问的最小距离节点
+        int minDist = INT_MAX, u = -1;
+        for (int v = 0; v < g.n; v++) {
+            if (!visited[v] && dist[v] < minDist) {
+                minDist = dist[v];
+                u = v;
+            }
+        }
+        if (u == -1) break;
+        visited[u] = true;
+
+        // 松弛操作
+        for (int v = 0; v < g.n; v++) {
+            if (!visited[v] && g.adj[u][v] != -1 && dist[u] != INT_MAX &&
+                dist[u] + g.adj[u][v] < dist[v]) {
+                dist[v] = dist[u] + g.adj[u][v];
+            }
+        }
+    }
+
+    cout << "从" << g.nodeNames[start] << "出发的最短路径：\n";
+    for (int i = 0; i < g.n; i++) {
+        cout << g.nodeNames[start] << "→" << g.nodeNames[i] << "：";
+        if (dist[i] == INT_MAX) cout << "不可达";
+        else cout << dist[i];
+        cout << endl;
+    }
+}
+
+// Prim最小生成树（从start出发）
+void Prim(const Graph& g, int start) {
+    vector<int> key(g.n, INT_MAX);  // 各节点到生成树的最小权值
+    vector<int> parent(g.n, -1);    // 父节点
+    vector<bool> inMST(g.n, false); // 是否在MST中
+
+    key[start] = 0;
+    int totalWeight = 0;
+
+    for (int i = 0; i < g.n - 1; i++) {
+        // 选key最小的未加入MST的节点
+        int minKey = INT_MAX, u = -1;
+        for (int v = 0; v < g.n; v++) {
+            if (!inMST[v] && key[v] < minKey) {
+                minKey = key[v];
+                u = v;
+            }
+        }
+        if (u == -1) break;
+        inMST[u] = true;
+        totalWeight += key[u];
+
+        // 更新邻接节点的key
+        for (int v = 0; v < g.n; v++) {
+            if (!inMST[v] && g.adj[u][v] != -1 && g.adj[u][v] < key[v]) {
+                key[v] = g.adj[u][v];
+                parent[v] = u;
+            }
+        }
+    }
+
+    cout << "最小生成树（MST）边集（从" << g.nodeNames[start] << "出发）：\n";
+    for (int i = 1; i < g.n; i++) {
+        if (parent[i] != -1) {
+            cout << g.nodeNames[parent[i]] << "-" << g.nodeNames[i] 
+                 << "（权值：" << g.adj[parent[i]][i] << "）\n";
+        }
+    }
+    cout << "MST总权值：" << totalWeight << endl;
+}
